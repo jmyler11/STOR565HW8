@@ -1,0 +1,349 @@
+---
+title: "STOR 565 Homework 8"
+output:
+  html_document
+---
+
+Name: Jillian Myler
+
+Use of ChatGPT:
+
+**This homework is due on Apr. 16th at 11:55 pm.** You must submit **your own** homework as knitted HTML/PDF file to Canvas
+
+Instruction: fill your answers in the `.Rmd`, compile it to HTML/PDF and submit the complied file. Uncompiled `.Rmd` file will not be graded.  
+
+For the NN homework, if you have trouble to install tensorflow and kera in your local computer, please finish them using python or R in colab and then do screenshots to show that you have finished the homework. Please insert the screenshots into this rmd file when knitting the final html for submission.
+
+Many of the questions are from the ISLR text book. 
+```{r,include=FALSE}
+library(ISLR) #load the ISLR package
+```
+
+# Support vector approaches
+In this problem, you will use support vector approaches in order to
+predict whether a given car gets high or low gas mileage based on the
+`Auto` data set.
+
+First load the `Auto` dataset: Gas mileage, horsepower, and other information for 392 vehicles.
+```{r}
+data(Auto)
+str(Auto)
+```
+
+a) (3 points) Create a binary variable that takes on a 1 for cars with gas
+mileage above the median, and a 0 for cars with gas mileage
+below the median.
+
+
+```{r}
+Auto2 <- Auto %>%
+  mutate(mpg01=ifelse(mpg > median(mpg), 1, 0) %>% as.factor) %>%
+  select(-c(mpg, name))
+
+Auto2
+```
+
+b) (7 points) Fit a support vector classifier to the data with various values
+of `cost` (check our slides where we define the `cost` C), in order to predict whether a car gets high or low gas
+mileage. Report the cross-validation errors associated with different
+values of this parameter. Comment on your results. Note
+you will need to fit the classifier without the gas mileage variable
+to produce sensible results.
+```{r}
+set.seed(123)
+linear_tune <- tune(svm, mpg01 ~ ., data = df, kernel = "linear",
+                 ranges = list(cost = c(.001, .01, .1, 1, 5, 10, 100)))
+summary(linear_tune)
+linear_tune$best.parameters
+linear_tune$best.performance
+
+
+```
+
+```{r}
+
+cv_errors <- numeric(length = 6)
+cost_values <-  c( 0.01, 0.1, 1, 5, 10, 100)
+
+for (i in seq_along(cost_values)) {
+  svm_fit <- svm(as.factor(mpg01) ~ ., data = Auto2, kernel = "linear", cost=cost_values[i], scale = FALSE)
+  
+  
+  cv_errors[i] <- 1 - mean(svm_fit$fitted == Auto2$mpg01)
+}
+                      
+cost_values
+cv_errors
+
+
+plot(log10(cost_values), cv_errors, type = "b", xlab = "log10(Cost)", ylab = "Cross-Validation Error")
+
+
+
+
+```
+
+c) (10 points) Now repeat (b), this time using SVMs with *radial* and *polynomial*
+basis kernels, with different values of gamma and degree and
+cost. Comment on your results.
+
+```{r}
+set.seed(123)
+radial_tune <- tune(svm, mpg01~., data=Auto2, kernel='radial',
+                 ranges = list(cost = c(.001, .01, .1, 1, 5, 10, 100,1000),
+                               gamma = c(0.5, 1, 2, 3, 4)))
+radial_tune$best.parameters
+radial_tune$best.performance
+
+
+
+```
+```{r}
+set.seed(123)
+poly_tune = tune(svm, mpg01~., data=Auto2, kernel='polynomial',
+                 ranges = list(cost = c(.001, .01, .1, 1, 5, 10, 100,1000),
+                               degree = c(1,2,3,4,5)))
+poly_tune$best.parameters
+poly_tune$best.performance
+
+```
+d) (5 points) Make some plots to back up your assertions in (b) and (c). Hint: In the lab, we used the plot() function for svm objects
+only in cases with p = 2. When p > 2, you can use the plot()
+function to create plots displaying pairs of variables at a time.
+Essentially, instead of typing `plot(svmfit , dat)`
+where svmfit contains your fitted model and dat is a data frame
+containing your data, you can type `plot(svmfit , dat , x1 ∼ x4)`
+in order to plot just the first and fourth variables. However, you
+must replace x1 and x4 with the correct variable names. To find
+out more, type ?plot.svm.
+
+
+
+```{r}
+svmfit_l <- svm(mpg01~., data=Auto2, kernel="linear", cost=0.1)
+svmfit_r <- svm(mpg01~., data=Auto2, kernel="radial", cost=1, gamma=1)
+svmfit_p <- svm(mpg01~., data=Auto2, kernel="polynomial", cost=10, degree=3)
+names_list <- names(Auto2)[-8]
+
+
+#linear
+plot(svmfit_l, Auto2, displacement~weight)
+
+#radial
+plot(svmfit_r, Auto2, displacement~weight)
+
+#polynomial
+plot(svmfit_p, Auto2, displacement~weight)
+```
+
+# Tree models
+
+In our R tutorial for trees, a classification tree was applied to the `Carseats` data set after
+converting `Sales` into a qualitative response variable. Now we will
+seek to predict `Sales` using regression trees and related approaches,treating the response as a quantitative variable.
+
+a) (3 points) Split the data set into a training set and a test set.
+
+```{r}
+set.seed(1)
+train = sample(1:nrow(Carseats), nrow(Carseats) / 2)
+Car.train = Carseats[train, ]
+Car.test = Carseats[-train,]
+
+
+
+```
+
+
+
+b) (5 points) Fit a regression tree to the training set. Plot the tree, and interpret
+the results. What test MSE do you obtain?
+
+```{r}
+library(tree)
+reg_tree = tree(Sales~.,data = Car.train)
+
+summary(reg_tree)
+plot(reg_tree)
+text(reg_tree ,pretty =0)
+```
+
+c) (7 points) Use cross-validation in order to determine the optimal level of
+tree complexity. Does pruning the tree improve the test MSE?
+```{r}
+yhat = predict(reg_tree,newdata = Car.test)
+mean((yhat - Car.test$Sales)^2)
+
+
+```
+```{r}
+
+cv.car = cv.tree(reg_tree)
+plot(cv.car$size, cv.car$dev, type = "b")
+
+
+```
+```{r}
+prune.car = prune.tree(reg_tree, best = 8)
+plot(prune.car)
+text(prune.car,pretty=0)
+
+
+```
+```{r}
+
+yhat=predict(prune.car, newdata= Car.test)
+mean((yhat-Car.test$Sales)^2)
+
+```
+Here we see that pruning the tree increases the Test MSE to approximately 5.1.
+
+d) (10 points) Use the bagging approach （check section 8.3.3 in ISLR) in order to analyze this data. What
+test MSE do you obtain? Use the `importance()` function to determine
+which variables are most important.
+```{r}
+library(randomForest)
+set.seed(1)
+bag_car = randomForest(Sales~.,data=Car.train,mtry = 10, importance = TRUE)
+
+
+yhat_bag = predict(bag_car,newdata=Car.test)
+mean((yhat_bag-Car.test$Sales)^2)
+
+```
+```{r}
+importance(bag_car)
+
+```
+```{r}
+varImpPlot(bag_car)
+
+```
+e) (10 points) Use random forests to analyze this data. What test MSE do you
+obtain? Use the `importance()` function to determine which variables
+are most important. Describe the effect of `m`, the number of
+variables considered at each split, on the error rate
+obtained.
+
+
+```{r}
+set.seed(1)
+rf_car = randomForest(Sales~.,data=Car.train,mtry = 3, importance = TRUE)
+yhat_rf = predict(rf_car,newdata=Car.test)
+mean((yhat_rf-Car.test$Sales)^2)
+
+
+```
+
+```{r}
+varImpPlot(rf_car)
+
+```
+
+The MSE obtained using random forest is 2.96 which means that there is not an improvement in comparison to bagging. 
+
+
+
+# Neural networks 
+
+a) (10 points) Fit a neural network to the `Default` data (in the ISLR package). Use a single hidden layer
+with `10` units, and dropout regularization. Have a look at Labs 10.9.1–
+10.9.2 in ISLR for guidance. Compare the classification performance of your
+model with that of linear logistic regression.
+
+```{r}
+library(reticulate)
+use_python("C:\\Users\\Jillian Myler\\PycharmProjects\\pythonProject17\\venv\\Scripts\\python.exe" )
+
+
+
+py_config()
+```
+
+
+```{r}
+library(keras)
+library(MASS)
+
+dat <- Boston
+x <- scale(model.matrix(crim ~ . - 1, data = dat))
+n <- nrow(dat)
+ntest <- trunc(n / 3)
+set.seed(123)
+testid <- sample(1:n, ntest)
+y <- dat$crim
+
+# Separate train and test data
+x_train <- x[-testid, ]
+y_train <- y[-testid]
+x_test <- x[testid, ]
+y_test <- y[testid]
+
+# Define the model
+nn <- keras_model_sequential()
+
+# Add layers to the model
+nn %>%
+  layer_dense(units = 10, activation = "relu", input_shape = ncol(x)) %>%
+  layer_dropout(rate = 0.4) %>%
+  layer_dense(units = 1)
+
+# Compile the model
+compile(nn, loss = "mse", 
+        optimizer = optimizer_rmsprop(), 
+        metrics = list("mean_absolute_error"))
+
+# Convert training and test data to tensor
+x_train_tensor <- as.matrix(x_train)
+x_test_tensor <- as.matrix(x_test)
+y_train_tensor <- as.matrix(y_train)
+y_test_tensor <- as.matrix(y_test)
+
+# Fit the model
+history <- fit(nn,
+               x = x_train_tensor, y = y_train_tensor,
+               epochs = 100,
+               batch_size = 26,
+               validation_data = list(x_test_tensor, y_test_tensor),
+               verbose = 0)
+
+# Plot training history
+plot(history, smooth = FALSE)
+
+# Evaluate the model
+npred <- predict(nn, x_test_tensor)
+neural_network_error <- mean(abs(y_test_tensor - npred))
+print(paste("Neural Network Mean Absolute Error:", neural_network_error))
+
+
+
+```
+
+
+
+b) （10 points) From your collection of personal photographs, pick 10 images of animals
+(such as dogs, cats, birds, farm animals, etc.). If the subject
+does not occupy a reasonable part of the image, then crop the image.
+Now use a pretrained image classification CNN as in Lab 10.9.4 （ISLR package） to
+predict the class of each of your images, and report the probabilities
+for the top five predicted classes for each image.
+
+c) （10 points) Check the note `R_Tutorial_CNN.ipynb` in class dropbox folder `STOR565_ColabNotebook`. Instead of using MINST dataset, use Fashion MNIST to train the CNN model `R_Tutorial_CNN.ipynb`, and report the accuracy of your trained model on the test set of 10,000 examples. 
+
+```{r,eval=FALSE}
+# use the following model structure
+cnn_model <- keras_model_sequential() %>%
+  layer_conv_2d(filters = 32, kernel_size = c(5,5), activation = 'relu', input_shape = input_shape) %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_conv_2d(filters = 64, kernel_size = c(5,5), activation = 'relu') %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_dropout(rate = 0.2) %>%
+  layer_flatten() %>%
+  layer_dense(units = 120, activation = 'relu') %>%
+  layer_dropout(rate = 0.5) %>%
+  layer_dense(units = 84, activation = 'relu') %>%
+  layer_dense(units = num_classes, activation = 'softmax')
+```
+
+d) Bonus (20 points). This problem is not required, however, if you get it done, you can get 20 bonus points for this homework. Check the [fine-tuning R example] (https://tensorflow.rstudio.com/guides/keras/transfer_learning) or [fine-tuning python example] (https://keras.io/guides/transfer_learning/), load the `xception` model pretrained on imagenet, and fine tuning it on a dog vs cat dataset in tensorflow - report your final model's results on the 2326 test samples. 
+
